@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>holt_igor · 3D affinity field</title>
+<style>
+  :root {
+    --bg: #05060a;
+    --ink: #e8eef8;
+    --muted: #8b97ab;
+    --gold: #f0c14a;
+    --violet: #7c6bff;
+    --line: rgba(255,255,255,.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: "Segoe UI", Helvetica, Arial, sans-serif; overflow: hidden; }
+  #c { display: block; width: 100%; height: 100%; }
+  header {
+    position: fixed; top: 16px; left: 18px; z-index: 4; pointer-events: none;
+    max-width: min(460px, calc(100vw - 36px));
+  }
+  header h1 { margin: 0 0 4px; font-size: 15px; letter-spacing: .14em; text-transform: uppercase; font-weight: 650; }
+  header p { margin: 0; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
+  .panel {
+    position: fixed; z-index: 4; background: rgba(8,10,16,.72); border: 1px solid var(--line);
+    backdrop-filter: blur(10px); border-radius: 14px; padding: 12px 14px;
+  }
+  .controls { top: 16px; right: 16px; display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; max-width: 420px; }
+  button {
+    background: #121722; color: var(--ink); border: 1px solid rgba(255,255,255,.12);
+    border-radius: 999px; padding: 7px 11px; font-size: 12px; cursor: pointer;
+  }
+  button.active { background: #1c2436; border-color: var(--gold); color: var(--gold); }
+  .legend {
+    left: 18px; bottom: 16px; width: 250px; font-size: 12px; color: var(--muted);
+  }
+  .legend b { color: var(--ink); font-weight: 600; }
+  .swatch { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+  #tip {
+    position: fixed; z-index: 5; display: none; pointer-events: none;
+    background: rgba(8,10,16,.9); border: 1px solid rgba(240,193,74,.35);
+    border-radius: 10px; padding: 8px 10px; font-size: 12px; max-width: 240px;
+  }
+  #tip strong { display: block; font-size: 13px; }
+  #tip span { color: var(--muted); }
+  .stat { margin-top: 8px; display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<header>
+  <h1>holt_igor · 3D affinity field</h1>
+  <p>Star graph lifted off the spiral. Radius falls with tie strength. Golden angle separates neighbors so the flat packing becomes a helix.</p>
+</header>
+<div class="panel controls">
+  <button id="b-helix" class="active">Helix</button>
+  <button id="b-shell">Shells</button>
+  <button id="b-sphere">Sphere</button>
+  <button id="b-spin">Spin</button>
+  <button id="b-labels">Labels</button>
+</div>
+<div class="panel legend">
+  <div><span class="swatch" style="background:#f0c14a"></span><b>Core ties</b> · weight ≥ 10</div>
+  <div><span class="swatch" style="background:#5ec8ff"></span><b>Inner</b> · 4–9</div>
+  <div><span class="swatch" style="background:#8d7cff"></span><b>Mid</b> · 2–3</div>
+  <div><span class="swatch" style="background:#3d4d6e"></span><b>Outer</b> · 1</div>
+  <div class="stat" id="stat"></div>
+</div>
+<div id="tip"></div>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const NODES = [
+  { id: "skindie___", name: "Skindie", value: 19 },
+  { id: "AorathianMaps", name: "Robin Richardson", value: 13 },
+  { id: "AiofEffect", name: "AiofEffect", value: 12 },
+  { id: "ProofofMaro", name: "maro", value: 12 },
+  { id: "grok", name: "Grok", value: 5 },
+  { id: "Soorena", name: "Soorena", value: 5 },
+  { id: "sierracatalina", name: "sierra catalina", value: 5 },
+  { id: "OSoulsie", name: "Souls", value: 4 },
+  { id: "AODxLA", name: "AOD", value: 4 },
+  { id: "bot", name: "Grok Bot", value: 4 },
+  { id: "comedypartdeux", name: "Donny Parmesani", value: 4 },
+  { id: "GregoryNimensky", name: "nimensky (e/acc)", value: 3 },
+  { id: "XRPeaceOfMind", name: "Shellfish", value: 3 },
+  { id: "Miss_G_1", name: "Miss G", value: 3 },
+  { id: "AunySillyMe", name: "Auny", value: 3 },
+  { id: "unkonfined", name: "Unkonfined", value: 3 },
+  { id: "cosmosarcive", name: "Cosmos Archive", value: 3 },
+  { id: "rookepoole", name: "Rooke Poole", value: 2 },
+  { id: "adinaS3", name: "Adina", value: 2 },
+  { id: "beffjezos", name: "Beff (e/acc)", value: 2 },
+  { id: "warwithwhom", name: "warwithwhom", value: 2 },
+  { id: "PierceLilholt", name: "Pierce Alexander Lilholt", value: 2 },
+  { id: "hovinthenorth", name: "Hovhannes Mkhitaryan", value: 2 },
+  { id: "qbitstream", name: "meow", value: 2 },
+  { id: "juan_gonzalesP", name: "GonzalesJ", value: 2 },
+  { id: "SimonGFarmer", name: "Simon G. Farmer", value: 2 },
+  { id: "antigrok", name: "Anti Grok", value: 2 },
+  { id: "GearlessRoe", name: "Roe", value: 1 },
+  { id: "elonmusk", name: "Elon Musk", value: 1 },
+  { id: "WilliamJMcCart7", name: "wjmccartan-Billy", value: 1 },
+  { id: "suavecito585", name: "Suavecito", value: 1 },
+  { id: "Observer__369", name: "Timothy the Observer", value: 1 },
+  { id: "zebanderson", name: "Zeb Anderson", value: 1 },
+  { id: "TinfoilTricorn", name: "The Tinfoil Tricorn", value: 1 },
+  { id: "SmoothCat", name: "Tony Rosamilia", value: 1 },
+  { id: "MaryMajic", name: "Mary", value: 1 },
+  { id: "chriswwriter", name: "Chris Whitenack", value: 1 },
+  { id: "missMihalik", name: "Kamilla Mihalik", value: 1 },
+  { id: "anah_sahh", name: "Hannah", value: 1 },
+  { id: "DIZZHAKK", name: "DIZZHAKK", value: 1 },
+  { id: "jobescape_ai", name: "Jobescape", value: 1 },
+  { id: "DoinksTheFrog", name: "Doinks The Frog", value: 1 },
+  { id: "NotPierce69", name: "S", value: 1 },
+  { id: "VoidStateKate", name: "VOID", value: 1 },
+  { id: "DaneDe4orest", name: "Dane DeForest", value: 1 },
+  { id: "HennieLudick", name: "Hennie Ludick", value: 1 },
+  { id: "RealCashpig", name: "Cashpig", value: 1 },
+  { id: "Kyrannio", name: "Kiri", value: 1 },
+  { id: "expressochai", name: "Chai", value: 1 },
+  { id: "UziObi", name: "Uzi Obi", value: 1 }
+];
+
+const PHI = Math.PI * (3 - Math.sqrt(5));
+const maxW = Math.max(...NODES.map(n => n.value));
+const sumW = NODES.reduce((s, n) => s + n.value, 0);
+
+function band(v) {
+  if (v >= 10) return { color: 0xf0c14a, ring: "#f0c14a", tier: "core" };
+  if (v >= 4) return { color: 0x5ec8ff, ring: "#5ec8ff", tier: "inner" };
+  if (v >= 2) return { color: 0x8d7cff, ring: "#8d7cff", tier: "mid" };
+  return { color: 0x3d4d6e, ring: "#6d7c99", tier: "outer" };
+}
+
+function layout(mode) {
+  const n = NODES.length;
+  return NODES.map((node, i) => {
+    const w = node.value / maxW;
+    const angle = i * PHI;
+    let x, y, z;
+    if (mode === "helix") {
+      const radius = 2.15 + Math.pow(1 - w, 0.72) * 9.2;
+      const lift = (i / (n - 1) - 0.5) * 11.5;
+      x = Math.cos(angle) * radius;
+      z = Math.sin(angle) * radius;
+      y = lift + (w - 0.3) * 0.4;
+    } else if (mode === "shell") {
+      const shell = w >= 0.5 ? 3.1 : w >= 0.2 ? 5.6 : w >= 0.1 ? 8.1 : 10.6;
+      const inShell = NODES.filter(o => {
+        const ow = o.value / maxW;
+        const s = ow >= 0.5 ? 3.1 : ow >= 0.2 ? 5.6 : ow >= 0.1 ? 8.1 : 10.6;
+        return s === shell;
+      });
+      const k = inShell.indexOf(node);
+      const a = k * PHI + shell;
+      const ySpan = shell * 0.42;
+      x = Math.cos(a) * shell;
+      z = Math.sin(a) * shell;
+      y = (k / Math.max(1, inShell.length - 1) - 0.5) * ySpan;
+    } else {
+      const yUnit = 1 - (i / Math.max(1, n - 1)) * 2;
+      const rUnit = Math.sqrt(Math.max(0, 1 - yUnit * yUnit));
+      const radius = 3.2 + Math.pow(1 - w, 0.65) * 7.4;
+      x = Math.cos(angle) * rUnit * radius;
+      z = Math.sin(angle) * rUnit * radius;
+      y = yUnit * radius * 0.72;
+    }
+    return new THREE.Vector3(x, y, z);
+  });
+}
+
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.setClearColor(0x05060a, 1);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x05060a, 0.028);
+const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 200);
+camera.position.set(11.5, 6.2, 16.5);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.target.set(0, 0, 0);
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.55;
+
+scene.add(new THREE.AmbientLight(0x9eb0cc, 0.55));
+const key = new THREE.PointLight(0xf0c14a, 18, 40);
+key.position.set(0, 1.2, 0);
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x88aaff, 0.55);
+rim.position.set(-8, 6, 10);
+scene.add(rim);
+
+function coreTexture() {
+  const s = 512, c = document.createElement("canvas");
+  c.width = c.height = s;
+  const g = c.getContext("2d");
+  g.clearRect(0, 0, s, s);
+  g.beginPath();
+  g.arc(s / 2, s / 2, 230, 0, Math.PI * 2);
+  g.fillStyle = "#07080c";
+  g.fill();
+  g.lineWidth = 18;
+  g.strokeStyle = "#f4f7fb";
+  g.stroke();
+  g.strokeStyle = "#f7f8fb";
+  g.lineWidth = 34;
+  g.lineCap = "round";
+  g.beginPath();
+  g.arc(256, 256, 92, Math.PI * 0.85, Math.PI * 1.72);
+  g.stroke();
+  g.beginPath();
+  g.moveTo(168, 214);
+  g.quadraticCurveTo(250, 150, 338, 246);
+  g.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: coreTexture(), transparent: true, depthWrite: false }));
+core.scale.set(2.35, 2.35, 1);
+core.position.set(0, 0.15, 0);
+scene.add(core);
+
+const halo = new THREE.Mesh(
+  new THREE.RingGeometry(1.35, 1.48, 80),
+  new THREE.MeshBasicMaterial({ color: 0xf0c14a, transparent: true, opacity: 0.45, side: THREE.DoubleSide })
+);
+halo.rotation.x = Math.PI / 2.4;
+scene.add(halo);
+
+function discTexture(label, ring, badge) {
+  const s = 256, c = document.createElement("canvas");
+  c.width = c.height = s;
+  const g = c.getContext("2d");
+  g.beginPath();
+  g.arc(128, 128, 108, 0, Math.PI * 2);
+  g.fillStyle = "#141824";
+  g.fill();
+  g.lineWidth = 10;
+  g.strokeStyle = ring;
+  g.stroke();
+  g.fillStyle = "#e8eef8";
+  g.font = "600 42px Segoe UI, Helvetica, sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  const initials = label.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase();
+  g.fillText(initials || "•", 128, 132);
+  g.beginPath();
+  g.arc(196, 58, 28, 0, Math.PI * 2);
+  g.fillStyle = "#f0c14a";
+  g.fill();
+  g.fillStyle = "#1a1404";
+  g.font = "700 22px Segoe UI, Helvetica, sans-serif";
+  g.fillText(String(badge), 196, 60);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function paintAvatar(img, ring, badge) {
+  const s = 256, c = document.createElement("canvas");
+  c.width = c.height = s;
+  const g = c.getContext("2d");
+  g.beginPath();
+  g.arc(128, 128, 108, 0, Math.PI * 2);
+  g.closePath();
+  g.save();
+  g.clip();
+  g.drawImage(img, 20, 20, 216, 216);
+  g.restore();
+  g.beginPath();
+  g.arc(128, 128, 108, 0, Math.PI * 2);
+  g.lineWidth = 10;
+  g.strokeStyle = ring;
+  g.stroke();
+  g.beginPath();
+  g.arc(196, 58, 28, 0, Math.PI * 2);
+  g.fillStyle = "#f0c14a";
+  g.fill();
+  g.fillStyle = "#1a1404";
+  g.font = "700 22px Segoe UI, Helvetica, sans-serif";
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  g.fillText(String(badge), 196, 60);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const group = new THREE.Group();
+scene.add(group);
+const edgeGroup = new THREE.Group();
+scene.add(edgeGroup);
+const labelGroup = new THREE.Group();
+scene.add(labelGroup);
+
+const sprites = [];
+const edges = [];
+let targets = layout("helix");
+let mode = "helix";
+let showLabels = true;
+
+NODES.forEach((node, i) => {
+  const b = band(node.value);
+  const mat = new THREE.SpriteMaterial({
+    map: discTexture(node.name, b.ring, i + 1),
+    transparent: true,
+    depthWrite: false
+  });
+  const sprite = new THREE.Sprite(mat);
+  const scale = 0.72 + Math.sqrt(node.value / maxW) * 0.85;
+  sprite.scale.set(scale, scale, 1);
+  sprite.position.copy(targets[i]);
+  sprite.userData = { ...node, index: i + 1, tier: b.tier };
+  group.add(sprite);
+  sprites.push(sprite);
+
+  const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.15, 0), targets[i]]);
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({
+    color: b.color,
+    transparent: true,
+    opacity: 0.18 + 0.62 * (node.value / maxW)
+  }));
+  edgeGroup.add(line);
+  edges.push(line);
+
+  const lc = document.createElement("canvas");
+  lc.width = 512; lc.height = 96;
+  const lg = lc.getContext("2d");
+  lg.fillStyle = "rgba(8,10,16,0.55)";
+  lg.fillRect(40, 18, 432, 60);
+  lg.fillStyle = "#e8eef8";
+  lg.font = "500 28px Segoe UI, Helvetica, sans-serif";
+  lg.textAlign = "center";
+  lg.fillText("@" + node.id, 256, 58);
+  const ltex = new THREE.CanvasTexture(lc);
+  ltex.colorSpace = THREE.SRGBColorSpace;
+  const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: ltex, transparent: true, depthWrite: false }));
+  label.scale.set(2.4, 0.45, 1);
+  label.position.copy(targets[i]);
+  label.position.y -= scale * 0.62;
+  labelGroup.add(label);
+
+  const img = new Image();
+  img.crossOrigin = "anonymous";
+  img.onload = () => {
+    mat.map = paintAvatar(img, b.ring, i + 1);
+    mat.needsUpdate = true;
+  };
+  img.src = "https://unavatar.io/x/" + encodeURIComponent(node.id);
+});
+
+const dustGeo = new THREE.BufferGeometry();
+const dustCount = 400;
+const dustPos = new Float32Array(dustCount * 3);
+for (let i = 0; i < dustCount; i++) {
+  dustPos[i * 3] = (Math.random() - 0.5) * 36;
+  dustPos[i * 3 + 1] = (Math.random() - 0.5) * 22;
+  dustPos[i * 3 + 2] = (Math.random() - 0.5) * 36;
+}
+dustGeo.setAttribute("position", new THREE.BufferAttribute(dustPos, 3));
+scene.add(new THREE.Points(dustGeo, new THREE.PointsMaterial({ color: 0x9bb0d0, size: 0.035, transparent: true, opacity: 0.45 })));
+
+function applyLayout(next) {
+  mode = next;
+  targets = layout(next);
+  document.querySelectorAll(".controls button").forEach(b => b.classList.remove("active"));
+  document.getElementById("b-" + next).classList.add("active");
+  if (controls.autoRotate) document.getElementById("b-spin").classList.add("active");
+}
+document.getElementById("b-helix").onclick = () => applyLayout("helix");
+document.getElementById("b-shell").onclick = () => applyLayout("shell");
+document.getElementById("b-sphere").onclick = () => applyLayout("sphere");
+document.getElementById("b-spin").onclick = () => {
+  controls.autoRotate = !controls.autoRotate;
+  document.getElementById("b-spin").classList.toggle("active", controls.autoRotate);
+};
+document.getElementById("b-spin").classList.add("active");
+document.getElementById("b-labels").onclick = () => {
+  showLabels = !showLabels;
+  labelGroup.visible = showLabels;
+  document.getElementById("b-labels").classList.toggle("active", showLabels);
+};
+document.getElementById("b-labels").classList.add("active");
+
+const top = [...NODES].sort((a, b) => b.value - a.value).slice(0, 4);
+document.getElementById("stat").innerHTML =
+  `<span>nodes</span><b>${NODES.length}</b>` +
+  `<span>tie weight</span><b>${sumW}</b>` +
+  `<span>top</span><b>@${top[0].id} · ${top[0].value}</b>` +
+  `<span></span><b>@${top[1].id} · ${top[1].value}</b>`;
+
+const ray = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+const tip = document.getElementById("tip");
+canvas.addEventListener("pointermove", (e) => {
+  pointer.x = (e.clientX / innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / innerHeight) * 2 + 1;
+  ray.setFromCamera(pointer, camera);
+  const hit = ray.intersectObjects(sprites)[0];
+  if (!hit) { tip.style.display = "none"; return; }
+  const d = hit.object.userData;
+  tip.style.display = "block";
+  tip.style.left = e.clientX + 14 + "px";
+  tip.style.top = e.clientY + 14 + "px";
+  tip.innerHTML = `<strong>${d.index}. ${d.name}</strong><span>@${d.id} · weight ${d.value} · ${d.tier}</span>`;
+});
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+const clock = new THREE.Clock();
+function frame() {
+  requestAnimationFrame(frame);
+  const t = clock.getElapsedTime();
+  halo.rotation.z = t * 0.25;
+  sprites.forEach((sprite, i) => {
+    sprite.position.lerp(targets[i], 0.08);
+    const scale = sprite.scale.x;
+    const label = labelGroup.children[i];
+    label.position.copy(sprite.position);
+    label.position.y -= scale * 0.62;
+    const pts = edges[i].geometry.attributes.position;
+    pts.setXYZ(1, sprite.position.x, sprite.position.y, sprite.position.z);
+    pts.needsUpdate = true;
+  });
+  controls.update();
+  renderer.render(scene, camera);
+}
+frame();
+</script>
+</body>
+</html>

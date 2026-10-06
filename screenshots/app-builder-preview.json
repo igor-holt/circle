@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Affinity Field",
+      "hasCanvas": true,
+      "bodyTextLen": 397,
+      "bodyTextHash": "c6495908b243adeb69cf470aa0d2ba561f14337f8ebdf212850b7a266dda0cc6",
+      "bodyTextPrefix": "AFFINITY FIELD Force-directed layouts on the holt_igor ego netwo",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Affinity Field",
+      "hasCanvas": true,
+      "bodyTextLen": 397,
+      "bodyTextHash": "c6495908b243adeb69cf470aa0d2ba561f14337f8ebdf212850b7a266dda0cc6",
+      "bodyTextPrefix": "AFFINITY FIELD Force-directed layouts on the holt_igor ego netwo",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}
